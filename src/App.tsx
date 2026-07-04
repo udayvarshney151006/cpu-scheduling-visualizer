@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { simulate, type Process, type SchedulingResult } from './scheduler'
 
 const ALGOS = [
@@ -11,24 +11,43 @@ const ALGOS = [
   "Multilevel Queue",
 ]
 
-// map short names to scheduler keys
 const ALGO_MAP: Record<string, string> = {
-  "FCFS":                       "First-Come, First-Served (FCFS)",
-  "SJF (Non-Preemptive)":       "Shortest Job First (SJF) - Non-Preemptive",
-  "SRTF (Preemptive)":          "Shortest Remaining Time First (SRTF) - Preemptive",
-  "Round Robin":                "Round Robin (RR)",
-  "Priority (Non-Preemptive)":  "Priority Scheduling - Non-Preemptive",
-  "Priority (Preemptive)":      "Priority Scheduling - Preemptive",
-  "Multilevel Queue":           "Multilevel Queue",
+  "FCFS":                      "First-Come, First-Served (FCFS)",
+  "SJF (Non-Preemptive)":      "Shortest Job First (SJF) - Non-Preemptive",
+  "SRTF (Preemptive)":         "Shortest Remaining Time First (SRTF) - Preemptive",
+  "Round Robin":               "Round Robin (RR)",
+  "Priority (Non-Preemptive)": "Priority Scheduling - Non-Preemptive",
+  "Priority (Preemptive)":     "Priority Scheduling - Preemptive",
+  "Multilevel Queue":          "Multilevel Queue",
+}
+
+const ALGO_DESC: Record<string, string> = {
+  "FCFS":                      "Processes run in order of arrival. Simple but can cause long waits.",
+  "SJF (Non-Preemptive)":      "Shortest burst time runs next. Minimizes average wait.",
+  "SRTF (Preemptive)":         "Preemptive SJF — switches to a shorter job when one arrives.",
+  "Round Robin":               "Each process gets a fixed time slice (quantum) in turns.",
+  "Priority (Non-Preemptive)": "Highest priority process runs to completion first.",
+  "Priority (Preemptive)":     "Can preempt a running process if a higher priority one arrives.",
+  "Multilevel Queue":          "Processes grouped by priority into separate queues.",
 }
 
 const COLORS = [
-  '#2563eb','#16a34a','#d97706','#dc2626',
-  '#7c3aed','#0891b2','#db2777','#65a30d',
+  { bg: '#3b82f6', light: '#eff6ff', text: '#1d4ed8' },
+  { bg: '#10b981', light: '#ecfdf5', text: '#065f46' },
+  { bg: '#f59e0b', light: '#fffbeb', text: '#92400e' },
+  { bg: '#ef4444', light: '#fef2f2', text: '#991b1b' },
+  { bg: '#8b5cf6', light: '#f5f3ff', text: '#5b21b6' },
+  { bg: '#ec4899', light: '#fdf2f8', text: '#9d174d' },
+  { bg: '#14b8a6', light: '#f0fdfa', text: '#134e4a' },
+  { bg: '#f97316', light: '#fff7ed', text: '#9a3412' },
 ]
-const colorMap: Record<string, string> = {}
+
+const colorMap: Record<string, typeof COLORS[0]> = {}
 let ci = 0
-const gc = (id: string) => { if (!colorMap[id]) colorMap[id] = COLORS[ci++ % COLORS.length]; return colorMap[id] }
+const gc = (id: string) => {
+  if (!colorMap[id]) colorMap[id] = COLORS[ci++ % COLORS.length]
+  return colorMap[id]
+}
 
 const DEFAULTS: Process[] = [
   { id: 'P1', arrival: 2, burst: 3, priority: 2 },
@@ -40,12 +59,11 @@ DEFAULTS.forEach(p => gc(p.id))
 export default function App() {
   const [algo, setAlgo]     = useState('Priority (Preemptive)')
   const [tq, setTq]         = useState(2)
-  const [rows, setRows]     = useState<Process[]>(DEFAULTS)
+  const [procs, setProcs]   = useState<Process[]>(DEFAULTS)
   const [result, setResult] = useState<SchedulingResult | null>(null)
-  const [hoveredBar, setHoveredBar] = useState<number | null>(null)
+  const [hovBar, setHovBar] = useState<number | null>(null)
+  const [simKey, setSimKey] = useState(0)
 
-  // new row form
-  const idRef       = useRef<HTMLInputElement>(null)
   const [nid, setNid]   = useState('P4')
   const [nArr, setNArr] = useState(0)
   const [nBst, setNBst] = useState(1)
@@ -53,247 +71,284 @@ export default function App() {
   const [err, setErr]   = useState('')
 
   const runSim = () => {
-    setResult(simulate(ALGO_MAP[algo], rows, tq))
+    setResult(simulate(ALGO_MAP[algo], procs, tq))
+    setSimKey(k => k + 1)
   }
   useEffect(runSim, [])
 
   const addRow = () => {
-    if (!nid.trim())               { setErr('ID required'); return }
-    if (rows.find(r => r.id===nid)){ setErr(`${nid} already exists`); return }
-    if (nBst < 1)                  { setErr('Burst ≥ 1'); return }
+    if (!nid.trim())                   { setErr('Process ID required'); return }
+    if (procs.find(r => r.id === nid)) { setErr(`${nid} already exists`); return }
+    if (nBst < 1)                      { setErr('Burst time must be ≥ 1'); return }
     gc(nid)
-    setRows(r => [...r, { id: nid, arrival: nArr, burst: nBst, priority: nPri }])
+    setProcs(ps => [...ps, { id: nid, arrival: nArr, burst: nBst, priority: nPri }])
+    setNid(`P${procs.length + 2}`)
     setErr('')
-    const next = `P${rows.length + 2}`
-    setNid(next)
-    idRef.current?.focus()
   }
-
-  const deleteRow = (id: string) => setRows(r => r.filter(p => p.id !== id))
 
   const total = result?.ganttChart.at(-1)?.end ?? 0
 
-  const card: React.CSSProperties = {
+  // Shared styles
+  const panel: React.CSSProperties = {
     background: '#fff',
-    borderRadius: 10,
-    border: '1px solid #e4e4e7',
-    boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+    border: '1px solid #e5e7eb',
+    borderRadius: 12,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
   }
 
-  const inp: React.CSSProperties = {
-    background: '#fff',
-    border: '1px solid #d4d4d8',
-    borderRadius: 6,
-    padding: '6px 10px',
+  const inputStyle: React.CSSProperties = {
+    background: '#f9fafb',
+    border: '1px solid #e5e7eb',
+    borderRadius: 7,
+    padding: '7px 10px',
     fontSize: '0.82rem',
-    color: '#18181b',
+    color: '#111827',
     outline: 'none',
     width: '100%',
-    transition: 'border-color 0.15s',
+    transition: 'border-color 0.15s, box-shadow 0.15s',
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f4f4f5', padding: '24px 0 60px' }}>
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 20px' }}>
+    <div style={{ minHeight: '100vh', background: '#f8f9fb', paddingBottom: 80 }}>
 
-        {/* ── PAGE TITLE ─────────────────────────────────────── */}
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#18181b' }}>
-            CPU Scheduling Visualizer
-          </h1>
-          <p style={{ fontSize: '0.82rem', color: '#71717a', marginTop: 4 }}>
-            Add your processes, pick an algorithm, and hit Simulate.
-          </p>
-        </div>
-
-        {/* ── CONFIG ROW ─────────────────────────────────────── */}
-        <div style={{ ...card, padding: '18px 20px', marginBottom: 16, display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 200px' }}>
-            <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#52525b', marginBottom: 5 }}>Algorithm</label>
-            <div style={{ position: 'relative' }}>
-              <select
-                value={algo}
-                onChange={e => setAlgo(e.target.value)}
-                style={{ ...inp, paddingRight: 28, cursor: 'pointer' }}
-                onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                onBlur={e => (e.currentTarget.style.borderColor = '#d4d4d8')}
-              >
-                {ALGOS.map(a => <option key={a}>{a}</option>)}
-              </select>
-              <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', color: '#a1a1aa', pointerEvents: 'none', fontSize: '0.65rem' }}>▾</span>
-            </div>
+      {/* ── HEADER ──────────────────────────────────────────── */}
+      <div style={{ background: '#fff', borderBottom: '1px solid #e5e7eb' }}>
+        <div style={{ maxWidth: 960, margin: '0 auto', padding: '16px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h1 style={{ fontSize: '1rem', fontWeight: 700, color: '#111827', letterSpacing: '-0.01em' }}>
+              CPU Scheduling Visualizer
+            </h1>
+            <p style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: 1 }}>
+              Operating Systems — Process Scheduler
+            </p>
           </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {procs.map(p => {
+              const c = gc(p.id)
+              return (
+                <span key={p.id} title={`${p.id}: Arrival ${p.arrival}, Burst ${p.burst}`}
+                  style={{
+                    padding: '3px 9px', borderRadius: 99,
+                    background: c.light, color: c.text,
+                    fontSize: '0.7rem', fontWeight: 600,
+                    border: `1px solid ${c.bg}33`,
+                    fontFamily: "'JetBrains Mono', monospace",
+                  }}>
+                  {p.id}
+                </span>
+              )
+            })}
+          </div>
+        </div>
+      </div>
 
-          {algo === 'Round Robin' && (
-            <div style={{ width: 120 }}>
-              <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 500, color: '#52525b', marginBottom: 5 }}>Time Quantum</label>
-              <input
-                type="number" min={1} value={tq}
-                onChange={e => setTq(+e.target.value)}
-                style={inp}
-                onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                onBlur={e => (e.currentTarget.style.borderColor = '#d4d4d8')}
-              />
+      <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 24px 0' }}>
+
+        {/* ── ALGORITHM + SIMULATE ────────────────────────── */}
+        <div style={{ ...panel, padding: '20px 24px', marginBottom: 20 }}>
+          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+            <div style={{ flex: '1 1 200px' }}>
+              <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                Scheduling Algorithm
+              </label>
+              <div style={{ position: 'relative' }}>
+                <select
+                  value={algo}
+                  onChange={e => setAlgo(e.target.value)}
+                  style={{ ...inputStyle, background: '#fff', paddingRight: 32, cursor: 'pointer' }}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px #3b82f620' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.boxShadow = 'none' }}
+                >
+                  {ALGOS.map(a => <option key={a}>{a}</option>)}
+                </select>
+                <span style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none', fontSize: '0.6rem' }}>▾</span>
+              </div>
+              {/* Algorithm description */}
+              <p style={{ fontSize: '0.7rem', color: '#6b7280', marginTop: 6 }}>
+                {ALGO_DESC[algo]}
+              </p>
             </div>
-          )}
 
-          <button
-            onClick={runSim}
-            style={{
-              padding: '7px 20px',
-              background: '#2563eb', color: '#fff',
-              border: 'none', borderRadius: 6,
-              fontSize: '0.84rem', fontWeight: 500,
-              cursor: 'pointer', flexShrink: 0,
-              transition: 'background 0.12s',
+            {algo === 'Round Robin' && (
+              <div style={{ width: 130, flexShrink: 0 }}>
+                <label style={{ display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#374151', marginBottom: 6 }}>
+                  Time Quantum
+                </label>
+                <input type="number" min={1} value={tq}
+                  onChange={e => setTq(+e.target.value)}
+                  style={inputStyle}
+                  onFocus={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px #3b82f620' }}
+                  onBlur={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.boxShadow = 'none' }}
+                />
+              </div>
+            )}
+
+            <button onClick={runSim} style={{
+              padding: '8px 24px', background: '#2563eb', color: '#fff',
+              border: 'none', borderRadius: 8, fontSize: '0.84rem', fontWeight: 600,
+              cursor: 'pointer', flexShrink: 0, letterSpacing: '-0.01em',
+              transition: 'background 0.15s, transform 0.1s, box-shadow 0.15s',
+              boxShadow: '0 1px 3px rgba(37,99,235,0.3)',
             }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#1d4ed8')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#2563eb')}
-          >
-            Simulate
-          </button>
+              onMouseEnter={e => { e.currentTarget.style.background = '#1d4ed8'; e.currentTarget.style.transform = 'translateY(-1px)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.35)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = '#2563eb'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.boxShadow = '0 1px 3px rgba(37,99,235,0.3)' }}
+              onMouseDown={e => { e.currentTarget.style.transform = 'translateY(0)' }}
+            >
+              Simulate
+            </button>
+          </div>
         </div>
 
-        {/* ── PROCESS TABLE ──────────────────────────────────── */}
-        <div style={{ ...card, marginBottom: 16, overflow: 'hidden' }}>
-          <div style={{ padding: '14px 20px 10px', borderBottom: '1px solid #f4f4f5', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#18181b' }}>Processes</span>
-            <span style={{ fontSize: '0.72rem', color: '#a1a1aa' }}>{rows.length} in queue</span>
+        {/* ── PROCESS TABLE ───────────────────────────────── */}
+        <div style={{ ...panel, marginBottom: 20, overflow: 'hidden' }}>
+          <div style={{ padding: '14px 20px', borderBottom: '1px solid #f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827' }}>Process Queue</span>
+            <span style={{ fontSize: '0.7rem', color: '#9ca3af', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 99, padding: '2px 10px' }}>
+              {procs.length} process{procs.length !== 1 ? 'es' : ''}
+            </span>
           </div>
 
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
             <thead>
-              <tr style={{ background: '#fafafa', borderBottom: '1px solid #e4e4e7' }}>
-                <th style={th}>Process</th>
-                <th style={th}>Arrival</th>
-                <th style={th}>Burst</th>
-                <th style={th}>Priority</th>
-                <th style={{ ...th, width: 40 }}></th>
+              <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                {['Process', 'Arrival Time', 'Burst Time', 'Priority', ''].map(h => (
+                  <th key={h} style={{ padding: '9px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.03em' }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {rows.map((p, i) => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #f4f4f5', background: i % 2 === 0 ? '#fff' : '#fafafa' }}>
-                  <td style={td}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ width: 10, height: 10, borderRadius: '50%', background: gc(p.id), display: 'inline-block', flexShrink: 0 }} />
-                      <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>{p.id}</span>
-                    </div>
-                  </td>
-                  <td style={td}>{p.arrival}</td>
-                  <td style={td}>{p.burst}</td>
-                  <td style={td}>{p.priority}</td>
-                  <td style={td}>
-                    <button
-                      onClick={() => deleteRow(p.id)}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d4d4d8', fontSize: '1rem', lineHeight: 1, padding: '2px 4px', borderRadius: 4, transition: 'color 0.12s' }}
-                      onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
-                      onMouseLeave={e => (e.currentTarget.style.color = '#d4d4d8')}
-                    >×</button>
-                  </td>
-                </tr>
-              ))}
+              {procs.map((p, i) => {
+                const c = gc(p.id)
+                return (
+                  <tr key={p.id} className="fade-up"
+                    style={{ borderBottom: '1px solid #f9fafb', animationDelay: `${i * 30}ms`, transition: 'background 0.1s' }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <td style={{ padding: '10px 16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: c.bg, display: 'inline-block', flexShrink: 0, boxShadow: `0 0 0 3px ${c.light}` }} />
+                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 500, color: '#111827' }}>{p.id}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '10px 16px', fontFamily: "'JetBrains Mono', monospace", color: '#374151' }}>{p.arrival}</td>
+                    <td style={{ padding: '10px 16px', fontFamily: "'JetBrains Mono', monospace", color: '#374151' }}>{p.burst}</td>
+                    <td style={{ padding: '10px 16px' }}>
+                      <span style={{ background: c.light, color: c.text, fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>
+                        {p.priority}
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                      <button onClick={() => setProcs(ps => ps.filter(x => x.id !== p.id))}
+                        style={{ background: 'none', border: '1px solid transparent', cursor: 'pointer', color: '#d1d5db', fontSize: '0.75rem', padding: '3px 8px', borderRadius: 5, transition: 'all 0.12s' }}
+                        onMouseEnter={e => { e.currentTarget.style.color = '#ef4444'; e.currentTarget.style.borderColor = '#fecaca'; e.currentTarget.style.background = '#fef2f2' }}
+                        onMouseLeave={e => { e.currentTarget.style.color = '#d1d5db'; e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'none' }}
+                      >Remove</button>
+                    </td>
+                  </tr>
+                )
+              })}
 
-              {/* Inline add row */}
-              <tr style={{ background: '#fffbeb', borderTop: '1px solid #e4e4e7' }}>
-                <td style={{ padding: '8px 16px' }}>
-                  <input
-                    ref={idRef}
-                    value={nid}
-                    onChange={e => setNid(e.target.value)}
-                    placeholder="P4"
-                    style={{ ...inp, fontFamily: "'JetBrains Mono', monospace", width: 70 }}
-                    onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                    onBlur={e => (e.currentTarget.style.borderColor = '#d4d4d8')}
+              {/* Add row */}
+              <tr style={{ background: '#f9fafb', borderTop: '1px solid #e5e7eb' }}>
+                <td style={{ padding: '10px 16px' }}>
+                  <input value={nid} onChange={e => setNid(e.target.value)} placeholder="P4"
+                    style={{ ...inputStyle, width: 72, fontFamily: "'JetBrains Mono', monospace" }}
+                    onFocus={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px #3b82f620'; e.currentTarget.style.background = '#fff' }}
+                    onBlur={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.background = '#f9fafb' }}
                     onKeyDown={e => e.key === 'Enter' && addRow()}
                   />
                 </td>
-                <td style={{ padding: '8px 8px 8px 16px' }}>
-                  <input type="number" min={0} value={nArr} onChange={e => setNArr(+e.target.value)} style={{ ...inp, width: 70 }}
-                    onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                    onBlur={e => (e.currentTarget.style.borderColor = '#d4d4d8')} />
-                </td>
-                <td style={{ padding: '8px 8px' }}>
-                  <input type="number" min={1} value={nBst} onChange={e => setNBst(+e.target.value)} style={{ ...inp, width: 70 }}
-                    onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                    onBlur={e => (e.currentTarget.style.borderColor = '#d4d4d8')} />
-                </td>
-                <td style={{ padding: '8px 8px' }}>
-                  <input type="number" min={1} value={nPri} onChange={e => setNPri(+e.target.value)} style={{ ...inp, width: 70 }}
-                    onFocus={e => (e.currentTarget.style.borderColor = '#2563eb')}
-                    onBlur={e => (e.currentTarget.style.borderColor = '#d4d4d8')} />
-                </td>
-                <td style={{ padding: '8px 16px' }}>
-                  <button
-                    onClick={addRow}
-                    style={{
-                      padding: '5px 12px', background: '#f4f4f5',
-                      border: '1px solid #d4d4d8', borderRadius: 5,
-                      fontSize: '0.75rem', cursor: 'pointer', color: '#52525b',
-                      transition: 'all 0.12s', whiteSpace: 'nowrap',
-                    }}
+                {[
+                  { val: nArr, set: setNArr },
+                  { val: nBst, set: setNBst },
+                  { val: nPri, set: setNPri },
+                ].map(({ val, set }, i) => (
+                  <td key={i} style={{ padding: '10px 16px' }}>
+                    <input type="number" min={i === 1 ? 1 : 0} value={val} onChange={e => set(+e.target.value)}
+                      style={{ ...inputStyle, width: 80, fontFamily: "'JetBrains Mono', monospace" }}
+                      onFocus={e => { e.currentTarget.style.borderColor = '#3b82f6'; e.currentTarget.style.boxShadow = '0 0 0 3px #3b82f620'; e.currentTarget.style.background = '#fff' }}
+                      onBlur={e => { e.currentTarget.style.borderColor = '#e5e7eb'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.background = '#f9fafb' }}
+                    />
+                  </td>
+                ))}
+                <td style={{ padding: '10px 16px', textAlign: 'right' }}>
+                  <button onClick={addRow}
+                    style={{ padding: '6px 14px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 6, fontSize: '0.78rem', fontWeight: 500, color: '#374151', cursor: 'pointer', transition: 'all 0.12s' }}
                     onMouseEnter={e => { e.currentTarget.style.background = '#2563eb'; e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#2563eb' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#f4f4f5'; e.currentTarget.style.color = '#52525b'; e.currentTarget.style.borderColor = '#d4d4d8' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#374151'; e.currentTarget.style.borderColor = '#d1d5db' }}
                   >+ Add</button>
                 </td>
               </tr>
             </tbody>
           </table>
-          {err && <p style={{ padding: '6px 20px 10px', fontSize: '0.72rem', color: '#ef4444' }}>{err}</p>}
+          {err && <p style={{ padding: '6px 20px 12px', fontSize: '0.72rem', color: '#ef4444' }}>{err}</p>}
         </div>
 
-        {/* ── GANTT CHART ────────────────────────────────────── */}
+        {/* ── GANTT CHART ─────────────────────────────────── */}
         {result && result.ganttChart.length > 0 && (
-          <div style={{ ...card, padding: '20px 20px 22px', marginBottom: 16 }}>
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#18181b' }}>Gantt Chart</span>
-              <span style={{ fontSize: '0.72rem', color: '#a1a1aa' }}>Total: {total} ms</span>
+          <div style={{ ...panel, padding: '22px 24px', marginBottom: 20 }} key={`gantt-${simKey}`}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <div>
+                <span style={{ fontSize: '0.82rem', fontWeight: 600, color: '#111827' }}>Gantt Chart</span>
+                <span style={{ fontSize: '0.7rem', color: '#9ca3af', marginLeft: 10 }}>
+                  {algo} · {total} ms total · {result.ganttChart.length} blocks
+                </span>
+              </div>
+              {/* Mini legend */}
+              <div style={{ display: 'flex', gap: 10 }}>
+                {[...new Set(result.ganttChart.map(b => b.process))].map(pid => {
+                  const c = gc(pid)
+                  return (
+                    <div key={pid} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 8, height: 8, borderRadius: 2, background: c.bg, display: 'inline-block' }} />
+                      <span style={{ fontSize: '0.68rem', color: '#6b7280', fontFamily: "'JetBrains Mono', monospace" }}>{pid}</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
 
             <div style={{ overflowX: 'auto' }}>
-              <div style={{ minWidth: 480 }}>
-
+              <div style={{ minWidth: 500 }}>
                 {/* Bars */}
-                <div style={{ display: 'flex', height: 52, gap: 2, marginBottom: 6 }}>
+                <div style={{ display: 'flex', height: 64, gap: 3, marginBottom: 8 }}>
                   {result.ganttChart.map((b, i) => {
-                    const color = gc(b.process)
+                    const c = gc(b.process)
                     const w = ((b.end - b.start) / total) * 100
-                    const isH = hoveredBar === i
+                    const isH = hovBar === i
                     return (
-                      <div
-                        key={`${b.process}-${i}`}
-                        className="bar-animate"
+                      <div key={`${b.process}-${i}`} className="bar-grow"
                         style={{
-                          width: `${w}%`, minWidth: 30, flexShrink: 0,
-                          background: isH ? color : color + 'e0',
-                          borderRadius: 5,
+                          width: `${w}%`, minWidth: 32, flexShrink: 0,
+                          background: isH ? c.bg : c.bg,
+                          opacity: isH ? 1 : 0.88,
+                          borderRadius: 7,
                           display: 'flex', flexDirection: 'column',
                           alignItems: 'center', justifyContent: 'center',
                           cursor: 'default', position: 'relative',
-                          animationDelay: `${i * 55}ms`,
-                          outline: isH ? `2px solid ${color}` : 'none',
-                          outlineOffset: 1,
-                          transition: 'outline 0.1s',
+                          animationDelay: `${i * 60}ms`,
+                          transition: 'opacity 0.15s, transform 0.15s, box-shadow 0.15s',
+                          transform: isH ? 'translateY(-3px) scaleY(1.04)' : 'none',
+                          boxShadow: isH ? `0 6px 16px ${c.bg}55` : `0 1px 3px ${c.bg}33`,
                         }}
-                        onMouseEnter={() => setHoveredBar(i)}
-                        onMouseLeave={() => setHoveredBar(null)}
+                        onMouseEnter={() => setHovBar(i)}
+                        onMouseLeave={() => setHovBar(null)}
                       >
-                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#fff', fontFamily: "'JetBrains Mono', monospace" }}>
-                          {b.process}
-                        </span>
-                        <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.75)', marginTop: 1 }}>
-                          {b.end - b.start}ms
-                        </span>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#fff', fontFamily: "'JetBrains Mono', monospace" }}>{b.process}</span>
+                        <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)', marginTop: 2 }}>{b.end - b.start}ms</span>
 
                         {isH && (
                           <div style={{
-                            position: 'absolute', bottom: 'calc(100% + 6px)',
-                            background: '#18181b', color: '#fff',
-                            fontSize: '0.67rem', padding: '4px 8px',
-                            borderRadius: 4, whiteSpace: 'nowrap',
+                            position: 'absolute', bottom: 'calc(100% + 8px)',
+                            background: '#111827', color: '#f9fafb',
+                            fontSize: '0.68rem', padding: '5px 10px',
+                            borderRadius: 6, whiteSpace: 'nowrap',
                             pointerEvents: 'none', zIndex: 20,
+                            boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
                           }}>
-                            {b.process} &nbsp;·&nbsp; t={b.start} → {b.end}
+                            <b style={{ fontFamily: "'JetBrains Mono', monospace" }}>{b.process}</b>
+                            &nbsp;·&nbsp; {b.start}ms → {b.end}ms &nbsp;·&nbsp; {b.end - b.start}ms burst
                           </div>
                         )}
                       </div>
@@ -302,15 +357,10 @@ export default function App() {
                 </div>
 
                 {/* Time axis */}
-                <div style={{ position: 'relative', height: 18, borderTop: '1px solid #e4e4e7' }}>
-                  <span style={{ position: 'absolute', left: 0, top: 4, fontSize: '0.62rem', color: '#a1a1aa', fontFamily: "'JetBrains Mono', monospace" }}>0</span>
+                <div style={{ position: 'relative', height: 20, borderTop: '1px solid #f3f4f6' }}>
+                  <Tick label="0" pct={0} />
                   {result.ganttChart.map((b, i) => (
-                    <span key={i} style={{
-                      position: 'absolute', left: `${(b.end / total) * 100}%`,
-                      transform: 'translateX(-50%)', top: 4,
-                      fontSize: '0.62rem', color: '#a1a1aa',
-                      fontFamily: "'JetBrains Mono', monospace",
-                    }}>{b.end}</span>
+                    <Tick key={i} label={String(b.end)} pct={(b.end / total) * 100} />
                   ))}
                 </div>
               </div>
@@ -318,59 +368,77 @@ export default function App() {
           </div>
         )}
 
-        {/* ── RESULTS ────────────────────────────────────────── */}
+        {/* ── RESULTS ─────────────────────────────────────── */}
         {result && result.metrics.length > 0 && (
-          <div style={{ ...card, overflow: 'hidden' }}>
-            <div style={{ padding: '14px 20px 10px', borderBottom: '1px solid #f4f4f5', display: 'flex', gap: 32, alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#18181b' }}>Results</span>
-              <div style={{ display: 'flex', gap: 24 }}>
-                <span style={{ fontSize: '0.78rem', color: '#52525b' }}>
-                  Avg wait: <b style={{ color: '#2563eb', fontFamily: "'JetBrains Mono', monospace" }}>{result.averages.avgWait.toFixed(2)} ms</b>
-                </span>
-                <span style={{ fontSize: '0.78rem', color: '#52525b' }}>
-                  Avg turnaround: <b style={{ color: '#2563eb', fontFamily: "'JetBrains Mono', monospace" }}>{result.averages.avgTurnaround.toFixed(2)} ms</b>
-                </span>
+          <div style={{ ...panel, overflow: 'hidden' }} key={`results-${simKey}`}>
+            {/* Stats header */}
+            <div style={{ padding: '16px 24px', borderBottom: '1px solid #f3f4f6', display: 'flex', gap: 0 }}>
+              <div style={{ flex: 1, paddingRight: 24, borderRight: '1px solid #f3f4f6' }}>
+                <p style={{ fontSize: '0.68rem', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.04em', marginBottom: 4 }}>AVG WAIT TIME</p>
+                <p style={{ fontSize: '1.6rem', fontWeight: 700, color: '#2563eb', letterSpacing: '-0.02em', fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>
+                  {result.averages.avgWait.toFixed(2)}<span style={{ fontSize: '0.8rem', fontWeight: 400, color: '#9ca3af', marginLeft: 4 }}>ms</span>
+                </p>
+              </div>
+              <div style={{ flex: 1, paddingLeft: 24, paddingRight: 24, borderRight: '1px solid #f3f4f6' }}>
+                <p style={{ fontSize: '0.68rem', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.04em', marginBottom: 4 }}>AVG TURNAROUND</p>
+                <p style={{ fontSize: '1.6rem', fontWeight: 700, color: '#111827', letterSpacing: '-0.02em', fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>
+                  {result.averages.avgTurnaround.toFixed(2)}<span style={{ fontSize: '0.8rem', fontWeight: 400, color: '#9ca3af', marginLeft: 4 }}>ms</span>
+                </p>
+              </div>
+              <div style={{ flex: 1, paddingLeft: 24 }}>
+                <p style={{ fontSize: '0.68rem', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.04em', marginBottom: 4 }}>CPU UTILIZATION</p>
+                <p style={{ fontSize: '1.6rem', fontWeight: 700, color: '#10b981', letterSpacing: '-0.02em', fontFamily: "'JetBrains Mono', monospace", lineHeight: 1 }}>
+                  {total > 0 ? ((procs.reduce((s, p) => s + p.burst, 0) / total) * 100).toFixed(1) : '—'}
+                  <span style={{ fontSize: '0.8rem', fontWeight: 400, color: '#9ca3af', marginLeft: 2 }}>%</span>
+                </p>
               </div>
             </div>
 
+            {/* Per-process table */}
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.82rem' }}>
               <thead>
-                <tr style={{ background: '#fafafa', borderBottom: '1px solid #e4e4e7' }}>
-                  <th style={th}>Process</th>
-                  <th style={th}>Priority</th>
-                  <th style={th}>Arrival</th>
-                  <th style={th}>Burst</th>
-                  <th style={th}>Wait</th>
-                  <th style={th}>Turnaround</th>
+                <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  {['Process', 'Priority', 'Arrival', 'Burst', 'Wait Time', 'Turnaround'].map(h => (
+                    <th key={h} style={{ padding: '10px 16px', textAlign: 'left', fontSize: '0.68rem', fontWeight: 600, color: '#9ca3af', letterSpacing: '0.03em' }}>{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
-                {result.metrics.map((row, i) => (
-                  <tr key={row.id} style={{ borderBottom: '1px solid #f4f4f5', background: i % 2 === 0 ? '#fff' : '#fafafa', transition: 'background 0.1s' }}
-                    onMouseEnter={e => (e.currentTarget.style.background = '#eff6ff')}
-                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 0 ? '#fff' : '#fafafa')}
-                  >
-                    <td style={td}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 10, height: 10, borderRadius: '50%', background: gc(row.id), flexShrink: 0 }} />
-                        <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 500 }}>{row.id}</span>
-                      </div>
-                    </td>
-                    <Tc>{row.priority}</Tc>
-                    <Tc>{row.arrival}</Tc>
-                    <Tc>{row.burst}</Tc>
-                    <Tc bold>{row.waitTime}</Tc>
-                    <Tc bold>{row.turnaroundTime}</Tc>
-                  </tr>
-                ))}
+                {result.metrics.map((row, i) => {
+                  const c = gc(row.id)
+                  return (
+                    <tr key={row.id} className="fade-up"
+                      style={{ borderBottom: '1px solid #f9fafb', animationDelay: `${i * 40}ms`, transition: 'background 0.1s' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <td style={{ padding: '12px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 10, height: 10, borderRadius: '50%', background: c.bg, flexShrink: 0, boxShadow: `0 0 0 3px ${c.light}` }} />
+                          <span style={{ fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: '#111827' }}>{row.id}</span>
+                        </div>
+                      </td>
+                      <td style={{ padding: '12px 16px' }}>
+                        <span style={{ background: c.light, color: c.text, fontSize: '0.72rem', fontWeight: 600, padding: '2px 8px', borderRadius: 99 }}>{row.priority}</span>
+                      </td>
+                      <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono', monospace", color: '#6b7280' }}>{row.arrival}</td>
+                      <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono', monospace", color: '#6b7280' }}>{row.burst}</td>
+                      <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: '#111827' }}>{row.waitTime}</td>
+                      <td style={{ padding: '12px 16px', fontFamily: "'JetBrains Mono', monospace", fontWeight: 600, color: '#111827' }}>{row.turnaroundTime}</td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
 
+        {/* Empty state */}
         {!result && (
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#a1a1aa', fontSize: '0.85rem' }}>
-            Configure your processes above and click Simulate.
+          <div style={{ textAlign: 'center', padding: '60px 0', color: '#9ca3af' }}>
+            <div style={{ fontSize: '2rem', marginBottom: 12 }}>⏱</div>
+            <p style={{ fontSize: '0.9rem', fontWeight: 500, color: '#6b7280' }}>Ready to simulate</p>
+            <p style={{ fontSize: '0.78rem', marginTop: 4 }}>Configure your processes and click Simulate</p>
           </div>
         )}
       </div>
@@ -378,24 +446,13 @@ export default function App() {
   )
 }
 
-// ── Shared styles ────────────────────────────────────────────
-const th: React.CSSProperties = {
-  padding: '9px 16px',
-  textAlign: 'left',
-  fontWeight: 500,
-  fontSize: '0.72rem',
-  color: '#71717a',
-}
-
-const td: React.CSSProperties = {
-  padding: '10px 16px',
-  color: '#3f3f46',
-}
-
-function Tc({ children, bold }: { children: React.ReactNode; bold?: boolean }) {
+function Tick({ label, pct }: { label: string; pct: number }) {
   return (
-    <td style={{ ...td, fontFamily: "'JetBrains Mono', monospace", color: bold ? '#18181b' : '#71717a', fontWeight: bold ? 500 : 400 }}>
-      {children}
-    </td>
+    <span style={{
+      position: 'absolute', left: `${pct}%`,
+      transform: 'translateX(-50%)', top: 5,
+      fontSize: '0.62rem', color: '#9ca3af',
+      fontFamily: "'JetBrains Mono', monospace",
+    }}>{label}</span>
   )
 }
