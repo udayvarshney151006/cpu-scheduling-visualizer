@@ -8,6 +8,7 @@ export default defineConfig({
     tailwindcss(),
     react()
   ],
+  base: '/cpu-scheduling-visualizer/',
   server: {
     allowedHosts: true,
   }
