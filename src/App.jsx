@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { simulate, type Process, type SchedulingResult } from './scheduler'
+import { simulate } from './scheduler'
 
 const ALGOS = [
   "FCFS",
@@ -11,7 +11,7 @@ const ALGOS = [
   "Multilevel Queue",
 ]
 
-const ALGO_MAP: Record<string, string> = {
+const ALGO_MAP = {
   "FCFS":                      "First-Come, First-Served (FCFS)",
   "SJF (Non-Preemptive)":      "Shortest Job First (SJF) - Non-Preemptive",
   "SRTF (Preemptive)":         "Shortest Remaining Time First (SRTF) - Preemptive",
@@ -21,7 +21,7 @@ const ALGO_MAP: Record<string, string> = {
   "Multilevel Queue":          "Multilevel Queue",
 }
 
-const ALGO_DESC: Record<string, string> = {
+const ALGO_DESC = {
   "FCFS":                      "Processes run in order of arrival. Simple but can cause long waits.",
   "SJF (Non-Preemptive)":      "Shortest burst time runs next. Minimizes average wait.",
   "SRTF (Preemptive)":         "Preemptive SJF — switches to a shorter job when one arrives.",
@@ -42,14 +42,15 @@ const COLORS = [
   { bg: '#f97316', light: '#fff7ed', text: '#9a3412' },
 ]
 
-const colorMap: Record<string, typeof COLORS[0]> = {}
+const colorMap = {}
 let ci = 0
-const gc = (id: string) => {
-  if (!colorMap[id]) colorMap[id] = COLORS[ci++ % COLORS.length]
+const gc = (id) => {
+  if (!colorMap[id]) colorMap[id] = COLORS[ci % COLORS.length]
+  ci++
   return colorMap[id]
 }
 
-const DEFAULTS: Process[] = [
+const DEFAULTS = [
   { id: 'P1', arrival: 2, burst: 3, priority: 2 },
   { id: 'P2', arrival: 0, burst: 3, priority: 1 },
   { id: 'P3', arrival: 4, burst: 2, priority: 3 },
@@ -59,9 +60,9 @@ DEFAULTS.forEach(p => gc(p.id))
 export default function App() {
   const [algo, setAlgo]     = useState('Priority (Preemptive)')
   const [tq, setTq]         = useState(2)
-  const [procs, setProcs]   = useState<Process[]>(DEFAULTS)
-  const [result, setResult] = useState<SchedulingResult | null>(null)
-  const [hovBar, setHovBar] = useState<number | null>(null)
+  const [procs, setProcs]   = useState(DEFAULTS)
+  const [result, setResult] = useState(null)
+  const [hovBar, setHovBar] = useState(null)
   const [simKey, setSimKey] = useState(0)
 
   const [nid, setNid]   = useState('P4')
@@ -89,14 +90,14 @@ export default function App() {
   const total = result?.ganttChart.at(-1)?.end ?? 0
 
   // Shared styles
-  const panel: React.CSSProperties = {
+  const panel = {
     background: '#fff',
     border: '1px solid #e5e7eb',
     borderRadius: 12,
     boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
   }
 
-  const inputStyle: React.CSSProperties = {
+  const inputStyle = {
     background: '#f9fafb',
     border: '1px solid #e5e7eb',
     borderRadius: 7,
@@ -446,7 +447,7 @@ export default function App() {
   )
 }
 
-function Tick({ label, pct }: { label: string; pct: number }) {
+function Tick({ label, pct }) {
   return (
     <span style={{
       position: 'absolute', left: `${pct}%`,

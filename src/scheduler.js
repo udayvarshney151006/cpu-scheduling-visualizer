@@ -1,45 +1,17 @@
-export interface Process {
-  id: string;
-  arrival: number;
-  burst: number;
-  priority: number;
-}
-
-export interface ScheduledBlock {
-  process: string;
-  start: number;
-  end: number;
-  color: string;
-}
-
-export interface ProcessMetrics extends Process {
-  waitTime: number;
-  turnaroundTime: number;
-}
-
-export interface SchedulingResult {
-  ganttChart: ScheduledBlock[];
-  metrics: ProcessMetrics[];
-  averages: {
-    avgWait: number;
-    avgTurnaround: number;
-  };
-}
-
 const colors = [
   "bg-blue-500", "bg-emerald-500", "bg-purple-500", "bg-amber-500", 
   "bg-pink-500", "bg-cyan-500", "bg-orange-500", "bg-rose-500"
 ];
 
-function getColor(index: number) {
+function getColor(index) {
   return colors[index % colors.length];
 }
 
-export function simulate(algorithm: string, processes: Process[], timeQuantum: number): SchedulingResult {
+export function simulate(algorithm, processes, timeQuantum) {
   if (processes.length === 0) return { ganttChart: [], metrics: [], averages: { avgWait: 0, avgTurnaround: 0 } };
 
   // Assign colors to processes
-  const processColors: Record<string, string> = {};
+  const processColors = {};
   processes.forEach((p, i) => processColors[p.id] = getColor(i));
 
   // Clone processes
@@ -47,9 +19,9 @@ export function simulate(algorithm: string, processes: Process[], timeQuantum: n
   
   let time = 0;
   let completed = 0;
-  let gantt: ScheduledBlock[] = [];
+  let gantt = [];
   
-  const addToGantt = (id: string, t1: number, t2: number) => {
+  const addToGantt = (id, t1, t2) => {
     if (t1 === t2) return;
     if (gantt.length > 0 && gantt[gantt.length - 1].process === id) {
       gantt[gantt.length - 1].end = t2;
@@ -58,7 +30,7 @@ export function simulate(algorithm: string, processes: Process[], timeQuantum: n
     }
   };
 
-  const isArrived = (p: any, t: number) => p.arrival <= t && p.remaining > 0;
+  const isArrived = (p, t) => p.arrival <= t && p.remaining > 0;
 
   if (algorithm === "First-Come, First-Served (FCFS)") {
     procs.sort((a, b) => a.arrival - b.arrival);
@@ -104,13 +76,13 @@ export function simulate(algorithm: string, processes: Process[], timeQuantum: n
     }
   }
   else if (algorithm === "Round Robin (RR)") {
-    let queue: any[] = [];
+    let queue = [];
     let t = Math.min(...procs.map(p => p.arrival)); // jump to first arrival
     time = t;
     
     let pending = [...procs].sort((a, b) => a.arrival - b.arrival);
     
-    const checkArrivals = (currentTime: number) => {
+    const checkArrivals = (currentTime) => {
       while (pending.length > 0 && pending[0].arrival <= currentTime) {
         queue.push(pending.shift());
       }
@@ -136,7 +108,7 @@ export function simulate(algorithm: string, processes: Process[], timeQuantum: n
       if (p.remaining > 0) {
         queue.push(p);
       } else {
-        procs.find(orig => orig.id === p.id)!.finish = time;
+        procs.find(orig => orig.id === p.id).finish = time;
       }
     }
   }
@@ -174,26 +146,6 @@ export function simulate(algorithm: string, processes: Process[], timeQuantum: n
       }
     }
   }
-  else if (algorithm === "Highest Response Ratio Next (HRRN)") {
-    while (completed < procs.length) {
-      let available = procs.filter(p => isArrived(p, time));
-      if (available.length === 0) {
-        time++;
-        continue;
-      }
-      available.forEach(p => {
-        let wait = time - p.arrival;
-        p.rr = (wait + p.burst) / p.burst;
-      });
-      available.sort((a, b) => b.rr - a.rr || a.arrival - b.arrival);
-      let p = available[0];
-      addToGantt(p.id, time, time + p.burst);
-      time += p.burst;
-      p.remaining = 0;
-      p.finish = time;
-      completed++;
-    }
-  }
   else if (algorithm === "Multilevel Queue") {
     while (completed < procs.length) {
       let available = procs.filter(p => isArrived(p, time));
@@ -228,7 +180,7 @@ export function simulate(algorithm: string, processes: Process[], timeQuantum: n
   }
 
   // Ensure unique contiguous gantt blocks
-  let finalGantt: ScheduledBlock[] = [];
+  let finalGantt = [];
   for (let block of gantt) {
     if (finalGantt.length > 0 && finalGantt[finalGantt.length - 1].process === block.process) {
       finalGantt[finalGantt.length - 1].end = block.end;
@@ -239,7 +191,6 @@ export function simulate(algorithm: string, processes: Process[], timeQuantum: n
 
   // Calculate metrics
   let metrics = procs.map(p => {
-    // wait time = finish - arrival - burst
     let turnaroundTime = p.finish - p.arrival;
     let waitTime = turnaroundTime - p.burst;
     return {
